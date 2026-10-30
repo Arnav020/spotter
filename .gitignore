@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+.vercel/
+.env
+.env*.local
+*.log
+next-env.d.ts
+*.tsbuildinfo
+# private planning notes
+HACKATHON_BRIEF.md
+IDEAS.md
+scratch/
+public/__test.mp4
+.claude/
