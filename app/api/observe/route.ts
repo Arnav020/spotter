@@ -29,6 +29,7 @@ Reply with JSON only:
 
 - "done" means the frame shows the step's visual check is satisfied, or its result is clearly visible.
 - "aheadDone" lists LATER steps whose result is already visible (meaning the person skipped ahead). Leave it empty when unsure.
+- "hazards" lists only physical dangers you can actually see (e.g. a knife pointing at a hand, an opened device still plugged in). Never list things that are missing, not yet done, or not visible. Usually empty.
 - "viewQuality" is "poor" if the work area is out of frame, too dark, or too blurry to judge.`;
 
 const CONTROLLER_SYSTEM = `You are Spotter's real-time coach. You get what the camera saw and decide the next action.
@@ -36,7 +37,7 @@ Actions:
 - "advance": the current step is done.
 - "stay": keep waiting, the step is not done yet.
 - "warn": a mistake is happening or a later step was started early (not safety-critical).
-- "alarm": a safety-critical step was skipped or a visible hazard exists. Tell them to stop.
+- "alarm": ONLY when the input has a NOTE saying a safety-critical step was skipped, or "hazards" is not empty. Tell them to stop. A step that hasn't started yet or isn't visible is never an alarm.
 - "reframe": the camera can't see the work.
 "say" is ONE short spoken sentence (max 14 words), calm and specific, addressed to the person. Don't repeat the same sentence you said recently. For "stay" with nothing new, "say" may be "".
 Reply with JSON only: {"action": "...", "say": "...", "reason": "short reason for the log"}`;
@@ -124,7 +125,10 @@ function normalizePerception(p: Perception, ahead: Step[]): Perception {
     aheadDone: (Array.isArray(p.aheadDone) ? p.aheadDone : [])
       .filter((a) => ids.has(a.stepId))
       .map((a) => ({ stepId: a.stepId, confidence: clamp01(Number(a.confidence)) })),
-    hazards: (Array.isArray(p.hazards) ? p.hazards : []).map(String).filter(Boolean).slice(0, 3),
+    hazards: (Array.isArray(p.hazards) ? p.hazards : [])
+      .map(String)
+      .filter((h) => h && !/(not visible|no hands?|not shown|missing|cannot see|can't see|unclear|none)/i.test(h))
+      .slice(0, 3),
     viewQuality: p.viewQuality === "poor" ? "poor" : "good",
   };
 }
@@ -152,6 +156,13 @@ function guard(d: Decision, p: Perception, current: Step, skipped: Step | null, 
       reason: `Safety-critical step "${skipped.title}" skipped`,
     };
   }
+  // Only the rules or a visible hazard can stop someone. The model can't raise an alarm on its own.
+  if (out.action === "alarm" && !p.hazards.length)
+    out = {
+      action: "stay",
+      say: hi ? `अब यह कीजिए: ${current.title}।` : `Next: ${current.title}.`,
+      reason: `${out.reason} (alarm held: nothing hazardous seen)`,
+    };
   if (p.viewQuality === "poor" && out.action !== "alarm") {
     return { action: "reframe", say: out.say || (hi ? "मुझे आपका काम नहीं दिख रहा। कैमरा ठीक कीजिए।" : "I can't see your hands. Move the camera."), reason: "Poor view" };
   }

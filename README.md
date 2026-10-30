@@ -106,11 +106,11 @@ vercel env add TAVILY_API_KEY production
 
 ## Cost and abuse protection
 
-The public demo has per-IP and global daily caps on every model route ([`lib/ratelimit.ts`](lib/ratelimit.ts)), small `max_tokens` budgets, 640 px JPEG frames, and the on-device gate. Keys never reach the browser.
+The public demo has per-IP and global daily caps on every model route ([`lib/ratelimit.ts`](lib/ratelimit.ts)) and a **hard daily dollar budget**: every call is priced from its real token usage, and once `SPOTTER_DAILY_BUDGET_USD` (default $1.50) is used up the server stops calling models ([`lib/nebius.ts`](lib/nebius.ts)). Add small `max_tokens` budgets, 640 px JPEG frames and the on-device gate, and a camera frame costs about $0.0002. Keys never reach the browser.
 
 ## Limitations (honest list)
 
-- **Latency:** a frame takes about 1–4 s to perceive and decide, so Spotter suits procedures measured in seconds to minutes. It is not for sub-second hazards.
+- **Latency:** measured on Token Factory, a frame takes about 1.5–3 s round trip (Super VL 1.0–2.5 s plus Nano 0.5–0.8 s). Compiling a new task takes about 10–13 s (Tavily 4–6 s plus Ultra 5–7 s). So Spotter suits procedures measured in seconds to minutes. It is not for sub-second hazards.
 - **Camera angle matters:** if hands or the work area are out of frame, Spotter asks you to reframe instead of guessing.
 - **Not a safety device:** Spotter is advisory and is not a certified interlock. The IoT webhook is a convenience, not a safety-rated cut-off.
 - **Single view:** occluded actions (behind the body, inside a container) can be missed. Manual "mark done" exists for this and is flagged in the audit as *not camera-verified*.

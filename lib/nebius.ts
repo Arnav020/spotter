@@ -15,6 +15,30 @@ export const MODELS = {
   fallback: process.env.SPOTTER_FALLBACK_MODEL || "nvidia/nemotron-3-super-120b-a12b",
 } as const;
 
+// Spend guard. Every call is priced from its real token usage, and once the daily budget is
+// used up the server refuses to call any model. Prices are $ per million tokens (in, out);
+// unknown models are priced at Ultra rates to stay on the safe side.
+const PRICES: Record<string, [number, number]> = {
+  "nvidia/Nemotron-3-Ultra-550b-a55b": [1, 3],
+  "nvidia/nemotron-3-super-120b-a12b": [0.3, 0.9],
+  "nvidia/Nemotron-3.5-Super-VL": [0.3, 0.9],
+  "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B": [0.06, 0.24],
+};
+const BUDGET_USD = Number(process.env.SPOTTER_DAILY_BUDGET_USD ?? 1.5);
+const spend = { usd: 0, resetAt: 0 };
+
+function spent() {
+  if (Date.now() > spend.resetAt) {
+    spend.usd = 0;
+    spend.resetAt = Date.now() + 24 * 60 * 60 * 1000;
+  }
+  return spend.usd;
+}
+
+export function spendStatus() {
+  return { usd: Math.round(spent() * 10000) / 10000, budget: BUDGET_USD };
+}
+
 export class ModelError extends Error {
   constructor(message: string, public status = 502) {
     super(message);
@@ -35,7 +59,7 @@ export function isConfigured() {
 export async function chat(
   model: string,
   messages: ChatMessage[],
-  opts: { maxTokens: number; temperature?: number; json?: boolean; thinking?: boolean; timeoutMs?: number; plain?: boolean },
+  opts: { maxTokens: number; temperature?: number; json?: boolean; thinking?: boolean; timeoutMs?: number; plain?: boolean; retried?: boolean },
 ): Promise<ChatResult> {
   if (MOCK) {
     await new Promise((r) => setTimeout(r, 300));
@@ -43,6 +67,7 @@ export async function chat(
   }
   const key = process.env.NEBIUS_API_KEY;
   if (!key) throw new ModelError("NEBIUS_API_KEY is not set on the server.", 503);
+  if (spent() >= BUDGET_USD) throw new ModelError("Today's demo budget is used up. Please try again tomorrow.", 429);
 
   const body: Record<string, unknown> = {
     model,
@@ -77,9 +102,16 @@ export async function chat(
     if (res.status === 400 && (opts.json || opts.thinking === false) && !opts.plain) {
       return chat(model, messages, { ...opts, plain: true });
     }
+    // Token Factory occasionally answers 502/503 "engine unavailable" for a moment. Retry once.
+    if (res.status >= 500 && !opts.retried) {
+      await new Promise((r) => setTimeout(r, 400));
+      return chat(model, messages, { ...opts, retried: true });
+    }
     throw new ModelError(`${model} returned ${res.status}: ${detail}`, res.status === 429 ? 429 : 502);
   }
   const data = await res.json();
+  const [pin, pout] = PRICES[model] ?? [1, 3];
+  spend.usd += ((data?.usage?.prompt_tokens ?? 0) * pin + (data?.usage?.completion_tokens ?? opts.maxTokens) * pout) / 1e6;
   const raw: string = data?.choices?.[0]?.message?.content ?? "";
   return {
     text: stripThinking(raw),

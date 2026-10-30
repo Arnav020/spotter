@@ -12,6 +12,8 @@ export async function searchProcedure(task: string): Promise<{ hits: TavilyHit[]
       query: `${task} step by step procedure official safety guidelines`,
       search_depth: "advanced",
       max_results: 5,
+      // Social posts are not authoritative procedure sources.
+      exclude_domains: ["facebook.com", "instagram.com", "tiktok.com", "x.com", "twitter.com", "pinterest.com", "reddit.com", "quora.com", "youtube.com"],
       include_answer: false,
     }),
     signal: AbortSignal.timeout(20_000),

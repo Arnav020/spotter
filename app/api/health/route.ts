@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isConfigured, MOCK, MODELS } from "@/lib/nebius";
+import { isConfigured, MOCK, MODELS, spendStatus } from "@/lib/nebius";
 
 export const dynamic = "force-dynamic";
 
@@ -9,5 +9,6 @@ export function GET() {
     mock: MOCK,
     tavily: Boolean(process.env.TAVILY_API_KEY),
     models: MODELS,
+    spend: spendStatus(),
   });
 }
