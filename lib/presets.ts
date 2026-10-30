@@ -31,7 +31,7 @@ export const PRESETS: Procedure[] = [
         id: "s3",
         title: "Pour exactly 1 litre of clean water",
         instruction: "Pour 1 litre of clean drinking water (boiled and cooled if unsure) into the container.",
-        visualCheck: "Water is poured into the container, filling it to about the 1-litre level or a measured 1-litre bottle is emptied in.",
+        visualCheck: "The container now holds about 1 litre of clear water: filled to a 1-litre mark, a 1-litre jug that is nearly full, or an empty 1-litre bottle next to it after pouring.",
         safetyCritical: true,
         watchFor: ["Pouring much less than 1 litre", "Using juice, milk or soft drink instead of water"],
       },

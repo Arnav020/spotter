@@ -104,7 +104,7 @@ export async function POST(req: Request) {
     );
     trace.push({ at: Date.now(), role: "controller", model: c.model, ms: c.ms, tokens: c.tokens, note: "Chose the action" });
 
-    const decision = guard(parseJson<Decision>(c.text), perception, current, skippedCritical, b.lang === "hi");
+    const decision = guard(parseJson<Decision>(c.text), perception, current, skippedCritical, b.lang === "hi", b.recent ?? []);
     return NextResponse.json({ perception, decision, trace });
   } catch (e) {
     const err = e instanceof ModelError ? e : new ModelError("Unexpected error");
@@ -142,7 +142,7 @@ function criticalSkipped(p: Perception, steps: Step[], idx: number): Step | null
 }
 
 // The language model proposes; these rules have the final say on safety and on advancing.
-function guard(d: Decision, p: Perception, current: Step, skipped: Step | null, hi: boolean): Decision {
+function guard(d: Decision, p: Perception, current: Step, skipped: Step | null, hi: boolean, recent: string[]): Decision {
   const actions = ["stay", "advance", "warn", "alarm", "reframe"];
   let out: Decision = {
     action: actions.includes(d.action) ? d.action : "stay",
@@ -171,7 +171,12 @@ function guard(d: Decision, p: Perception, current: Step, skipped: Step | null, 
   if (doneConfident && (out.action === "stay" || out.action === "warn") && !p.hazards.length)
     out = { ...out, action: "advance", reason: `${out.reason} (step verified)` };
   if (out.action === "advance" && current.safetyCritical && p.currentStep.confidence < 0.75)
-    out = { ...out, action: "stay", say: hi ? "यह स्टेप कैमरे को साफ़ दिखाइए।" : `Show me clearly: ${current.visualCheck}`, reason: "Safety-critical step needs stronger evidence" };
+    out = { ...out, action: "stay", say: hi ? "यह स्टेप कैमरे को साफ़ दिखाइए।" : `Hold it up so I can see clearly: ${current.title}.`, reason: "Safety-critical step needs stronger evidence" };
+  // Never nag with the same line. Second time, point to the manual button; after that, stay quiet.
+  if (out.say && recent.slice(-3).includes(out.say)) {
+    const hint = hi ? "अगर यह हो गया है, तो 'स्टेप पूरा' दबाइए।" : "If it's done, tap Mark step done.";
+    out = { ...out, say: recent.slice(-3).includes(hint) ? "" : hint };
+  }
   return out;
 }
 
