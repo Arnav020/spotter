@@ -24,7 +24,7 @@ if (!video || !presetId) {
   process.exit(1);
 }
 
-// Load presets by transpiling-free trick: fetch them through the page bundle is overkill; read the TS file.
+// The presets file is a plain array literal, so it can be read without a TypeScript build.
 const presetsSrc = readFileSync(new URL("../lib/presets.ts", import.meta.url), "utf8");
 const json = presetsSrc.slice(presetsSrc.indexOf("["), presetsSrc.lastIndexOf("]") + 1);
 // eslint-disable-next-line no-new-func

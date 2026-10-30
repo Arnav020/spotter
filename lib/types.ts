@@ -58,7 +58,7 @@ export type ObserveResult = {
 export type SessionEvent = {
   at: number;
   stepId: string | null;
-  kind: "started" | "done" | "skipped" | "warning" | "alarm" | "manual" | "finished";
+  kind: "started" | "done" | "skipped" | "warning" | "alarm" | "ack" | "manual" | "finished";
   detail: string;
   frame?: string;
 };

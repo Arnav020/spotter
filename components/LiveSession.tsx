@@ -49,6 +49,7 @@ export default function LiveSession({
   const statsRef = useRef({ sent: 0, gated: 0, totalMs: 0 });
   const traceRef = useRef<TraceEntry[]>(initialTrace);
   const quietStreak = useRef(0);
+  const alarmStep = useRef<string | null>(null);
   const backoffUntil = useRef(0);
   const localized = useRef<Record<string, { title: string; instruction: string }>>({});
   const loc = (i: number) => localized.current[steps[i].id] ?? steps[i];
@@ -157,6 +158,7 @@ export default function LiveSession({
       setIdx(next);
       setStatus(next, "active");
       setAlarm(null);
+      alarmStep.current = null;
       const s = loc(next);
       setCaption({ label: `Step ${next + 1} of ${steps.length}`, text: s.instruction });
       speak(config.lang === "hi" ? `स्टेप ${next + 1}. ${s.title}.` : `Step ${next + 1}. ${s.title}.`);
@@ -215,6 +217,9 @@ export default function LiveSession({
           break;
         }
         case "alarm": {
+          // One alarm per step until it's cleared, so a held position doesn't beep and log on every frame.
+          if (alarmStep.current === step.id) break;
+          alarmStep.current = step.id;
           setStatus(i, "flagged");
           setAlarm(d.say);
           setCaption({ label: "STOP", text: d.say });
@@ -423,7 +428,16 @@ export default function LiveSession({
                 <small>Safety stop</small>
                 {alarm}
                 <div>
-                  <button onClick={() => { setAlarm(null); setStatus(idxRef.current, "active"); }}>I've fixed it</button>
+                  <button
+                    onClick={() => {
+                      setAlarm(null);
+                      alarmStep.current = null;
+                      setStatus(idxRef.current, "active");
+                      log({ stepId: steps[idxRef.current].id, kind: "ack", detail: "Alarm acknowledged by user" });
+                    }}
+                  >
+                    I've fixed it
+                  </button>
                 </div>
               </div>
             </>
@@ -500,5 +514,5 @@ export default function LiveSession({
 }
 
 function label(kind: SessionEvent["kind"]) {
-  return { started: "▶", done: "✓", skipped: "⤼", warning: "⚠", alarm: "⛔", manual: "✋", finished: "■" }[kind];
+  return { started: "▶", done: "✓", skipped: "⤼", warning: "⚠", alarm: "⛔", ack: "↺", manual: "✋", finished: "■" }[kind];
 }
