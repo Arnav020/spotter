@@ -63,6 +63,7 @@ export const PRESETS: Procedure[] = [
     sources: [
       { title: "CDC: How to make oral rehydration solution (ORS)", url: "https://www.cdc.gov/global-water-sanitation-hygiene/media/pdfs/11_229310-j_ors_print-africa.pdf" },
       { title: "UNICEF Supply Division: Oral rehydration salts (ORS) and zinc", url: "https://www.unicef.org/supply/oral-rehydration-salts-ors-and-zinc" },
+      { title: "Case report: electrolyte imbalance from improper ORS dilution (Indian subcontinent)", url: "https://www.ijcasereportsandimages.com/archive/article-full-text/101515Z01CH2025" },
     ],
     compiledBy: "Preset, based on WHO/UNICEF/CDC guidance",
   },
@@ -85,6 +86,23 @@ export const PRESETS: Procedure[] = [
     ],
     sources: [{ title: "WHO: How to handwash (poster)", url: "https://www.who.int/docs/default-source/patient-safety/how-to-handwash-poster.pdf" }],
     compiledBy: "Preset, based on the WHO hand-washing poster",
+  },
+  {
+    id: "loto",
+    task: "Lock out a machine before servicing it (LOTO)",
+    summary:
+      "Lockout/tagout is one of the most-cited workplace safety failures. Spotter makes sure power is isolated, locked, tagged and verified dead before anyone puts a hand inside.",
+    setupTip: "Point the camera at the machine's power switch or plug and the area where you'll work.",
+    steps: [
+      { id: "s1", title: "Shut the machine down", instruction: "Stop the machine using its normal controls.", visualCheck: "The machine's power switch is in the OFF position or its indicator light is off.", safetyCritical: true, watchFor: ["Leaving it running while preparing"] },
+      { id: "s2", title: "Isolate the energy source", instruction: "Switch off the disconnect or breaker, or unplug the machine.", visualCheck: "The plug is pulled out of the socket, or the isolator/breaker handle is in the OFF position.", safetyCritical: true, watchFor: ["Only switching off at the machine, not at the source"] },
+      { id: "s3", title: "Apply lock and tag", instruction: "Fit your personal lock and a 'Do not operate' tag to the isolation point or plug.", visualCheck: "A padlock, lockout device, or clearly visible warning tag is attached to the plug, switch or breaker.", safetyCritical: true, watchFor: ["Tag without a lock", "Shared lock"] },
+      { id: "s4", title: "Release stored energy", instruction: "Let moving parts stop and discharge stored energy (springs, capacitors, pressure).", visualCheck: "All moving parts are stationary; no part of the machine is spinning or moving.", safetyCritical: false, watchFor: ["Reaching in while parts are still coasting"] },
+      { id: "s5", title: "Verify zero energy", instruction: "Try the start button (or test with a meter) to confirm the machine will not start.", visualCheck: "The person presses the machine's start/power button and nothing turns on, or a voltage tester is held to the machine.", safetyCritical: true, watchFor: ["Skipping the try-start test"] },
+      { id: "s6", title: "Begin service", instruction: "Only now open guards or covers and start the work.", visualCheck: "A guard or cover is opened, or tools are being used on the machine.", safetyCritical: false, watchFor: [] },
+    ],
+    sources: [{ title: "OSHA: Control of hazardous energy (lockout/tagout)", url: "https://www.osha.gov/control-hazardous-energy" }],
+    compiledBy: "Preset, based on OSHA 29 CFR 1910.147",
   },
   {
     id: "ram",

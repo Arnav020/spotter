@@ -48,6 +48,10 @@ export default function LiveSession({
   const statusesRef = useRef<StepStatus[]>(steps.map((_, i) => (i === 0 ? "active" : "pending")));
   const statsRef = useRef({ sent: 0, gated: 0, totalMs: 0 });
   const traceRef = useRef<TraceEntry[]>(initialTrace);
+  const quietStreak = useRef(0);
+  const backoffUntil = useRef(0);
+  const localized = useRef<Record<string, { title: string; instruction: string }>>({});
+  const loc = (i: number) => localized.current[steps[i].id] ?? steps[i];
 
   const [idx, setIdx] = useState(0);
   const [statuses, setStatuses] = useState<StepStatus[]>(statusesRef.current);
@@ -153,10 +157,11 @@ export default function LiveSession({
       setIdx(next);
       setStatus(next, "active");
       setAlarm(null);
-      const s = steps[next];
+      const s = loc(next);
       setCaption({ label: `Step ${next + 1} of ${steps.length}`, text: s.instruction });
-      speak(`Step ${next + 1}. ${s.title}.`);
+      speak(config.lang === "hi" ? `स्टेप ${next + 1}. ${s.title}.` : `Step ${next + 1}. ${s.title}.`);
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [steps, speak, setStatus, finish, config.lang],
   );
 
@@ -246,6 +251,7 @@ export default function LiveSession({
     const v = videoRef.current;
     if (!v || pausedRef.current || finishedRef.current || inFlight.current || v.readyState < 2 || v.videoWidth === 0) return;
     const now = Date.now();
+    if (now < backoffUntil.current) return;
     const { changed, commit } = sceneChanged();
     if (!changed && now - lastSentAt.current < HEARTBEAT_MS) {
       statsRef.current.gated++;
@@ -263,12 +269,21 @@ export default function LiveSession({
       const res = await fetch("/api/observe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: frame, steps, currentIndex: i, task: procedure.task, recent: recentSaid.current, lang: config.lang }),
+        body: JSON.stringify({
+          image: frame,
+          steps,
+          currentIndex: i,
+          task: procedure.task,
+          recent: recentSaid.current,
+          lang: config.lang,
+          quietStreak: quietStreak.current,
+        }),
       });
       const data = await res.json();
       if (data.trace) addTrace(data.trace);
       if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
       setApiError(null);
+      quietStreak.current = data.decision?.reason === "No change" ? quietStreak.current + 1 : 0;
       statsRef.current.sent++;
       statsRef.current.totalMs += Date.now() - now;
       const s = statsRef.current;
@@ -277,6 +292,7 @@ export default function LiveSession({
       if (idxRef.current === i && !finishedRef.current) handleResult(data as ObserveResult, capture(360, 0.7) ?? frame);
     } catch (e) {
       setApiError(e instanceof Error ? e.message : "Model call failed");
+      backoffUntil.current = Date.now() + 4000;
     } finally {
       inFlight.current = false;
       setThinking(false);
@@ -306,11 +322,27 @@ export default function LiveSession({
           v.src = url;
           v.onended = () => setVideoEnded(true);
         }
+        if (config.lang === "hi") {
+          // Translate once up front; fall back to English if it takes too long.
+          const tr = fetch("/api/translate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ lang: "hi", items: steps.map(({ id, title, instruction }) => ({ id, title, instruction })) }),
+          })
+            .then((r) => r.json())
+            .then((d) => {
+              for (const it of d.items ?? []) localized.current[it.id] = { title: it.title, instruction: it.instruction };
+              if (d.trace) addTrace(d.trace);
+            })
+            .catch(() => {});
+          await Promise.race([tr, new Promise((r) => setTimeout(r, 8000))]);
+        }
         await v.play();
         if (cancelled) return;
         log({ stepId: steps[0].id, kind: "started", detail: `Watching via ${config.source === "camera" ? "live camera" : "uploaded video"}` });
-        setCaption({ label: `Step 1 of ${steps.length}`, text: steps[0].instruction });
-        speak(`Let's start. Step 1. ${steps[0].title}.`);
+        const first = loc(0);
+        setCaption({ label: `Step 1 of ${steps.length}`, text: first.instruction });
+        speak(config.lang === "hi" ? `चलिए शुरू करते हैं। स्टेप 1. ${first.title}.` : `Let's start. Step 1. ${first.title}.`);
       } catch (e) {
         if (cancelled || (e instanceof DOMException && e.name === "AbortError")) return;
         setCamError(
@@ -368,17 +400,18 @@ export default function LiveSession({
   return (
     <main className="live" style={{ marginTop: 8 }}>
       <div>
+        <div className="bezel">
         <div className="stage">
           <video ref={videoRef} playsInline muted />
           {camError && <div className="placeholder">{camError}</div>}
           <div className="overlay-top">
-            <span className="chip">
-              <span className="rec" /> {paused ? "Paused" : "Watching"} · {procedure.task.slice(0, 48)}
+            <span className="chip glass">
+              <span className={`led ${paused ? "" : "live"}`} /> {paused ? "Paused" : "Watching"} · Step {Math.min(idx + 1, steps.length)}/{steps.length}
             </span>
-            {thinking && <span className="chip">Nemotron VL is looking…</span>}
+            {thinking && <span className="chip glass"><span className="spinner" style={{ width: 12, height: 12 }} /> Nemotron VL is looking</span>}
           </div>
           {caption && !alarm && (
-            <div className="caption" aria-live="polite">
+            <div className="caption glass" aria-live="polite">
               <small>{caption.label}</small>
               {caption.text}
             </div>
@@ -387,13 +420,15 @@ export default function LiveSession({
             <>
               <div className="alarm-frame" />
               <div className="alarm-banner" role="alert">
-                ⚠ {alarm}
+                <small>Safety stop</small>
+                {alarm}
                 <div>
                   <button onClick={() => { setAlarm(null); setStatus(idxRef.current, "active"); }}>I've fixed it</button>
                 </div>
               </div>
             </>
           )}
+        </div>
         </div>
 
         <div className="controls">

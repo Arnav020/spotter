@@ -5,6 +5,8 @@ import Setup from "@/components/Setup";
 import Review, { type SessionConfig } from "@/components/Review";
 import LiveSession, { type SessionResult } from "@/components/LiveSession";
 import Report from "@/components/Report";
+import { EyeCheck } from "@/components/Icons";
+import { PRESETS } from "@/lib/presets";
 import type { Procedure, TraceEntry } from "@/lib/types";
 
 type Health = { tokenFactory: boolean; tavily: boolean; mock: boolean; models: Record<string, string> };
@@ -21,6 +23,10 @@ export default function Home() {
 
   useEffect(() => {
     fetch("/api/health").then((r) => r.json()).then(setHealth).catch(() => setHealth(null));
+    // Deep link from the phone hand-off QR code: ?p=<preset id>
+    const p = new URLSearchParams(window.location.search).get("p");
+    const preset = PRESETS.find((x) => x.id === p);
+    if (preset) setStage({ name: "review", procedure: preset, trace: [] });
   }, []);
 
   useEffect(() => {
@@ -31,14 +37,12 @@ export default function Home() {
     <div className="wrap">
       <header className="top">
         <button className="brand" onClick={() => setStage({ name: "setup" })} aria-label="Spotter home">
-          <span className="brand-mark" aria-hidden>
-            <svg width="18" height="18" viewBox="0 0 32 32"><path d="M3 16s5-8 13-8 13 8 13 8-5 8-13 8S3 16 3 16Z" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinejoin="round"/><path d="m11.5 16 3 3 5.5-6" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </span>
+          <span className="brand-mark" aria-hidden><EyeCheck size={22} /></span>
           Spotter
         </button>
         <div className="status-pills">
-          <span className={`pill ${health?.tokenFactory ? "on" : "off"}`}>Nebius Token Factory</span>
-          <span className={`pill hide-sm ${health?.tavily ? "on" : "off"}`}>Tavily</span>
+          <span className="chip-soft"><span className={`led ${health ? (health.tokenFactory ? "on" : "off") : ""}`} />Nebius Token Factory</span>
+          <span className="chip-soft hide-sm"><span className={`led ${health ? (health.tavily ? "on" : "off") : ""}`} />Tavily</span>
         </div>
       </header>
 

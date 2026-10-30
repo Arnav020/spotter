@@ -13,6 +13,8 @@ type Body = {
   task: string;
   recent: string[];
   lang: "en" | "hi";
+  /** Consecutive frames with no change. After a few, the controller gets a turn to nudge the person. */
+  quietStreak: number;
 };
 
 const PERCEPTION_SYSTEM = `You are the eyes of Spotter, an assistant that watches a person do a hands-on task through a camera.
@@ -69,6 +71,20 @@ export async function POST(req: Request) {
     const perception = normalizePerception(parseJson<Perception>(p.text), ahead);
 
     const skippedCritical = criticalSkipped(perception, b.steps, idx);
+
+    // Nothing new to react to: let the rules hold position and spare the controller call.
+    const quiet =
+      !skippedCritical &&
+      perception.viewQuality === "good" &&
+      perception.hazards.length === 0 &&
+      perception.aheadDone.every((a) => a.confidence < 0.6) &&
+      perception.currentStep.status !== "done" &&
+      (Number(b.quietStreak) || 0) < 3;
+    if (quiet) {
+      trace.push({ at: Date.now(), role: "controller", model: "rules", ms: 0, note: "No change, so the controller wasn't called" });
+      return NextResponse.json({ perception, decision: { action: "stay", say: "", reason: "No change" }, trace });
+    }
+
     const c = await chat(
       MODELS.controller,
       [
@@ -87,7 +103,7 @@ export async function POST(req: Request) {
     );
     trace.push({ at: Date.now(), role: "controller", model: c.model, ms: c.ms, tokens: c.tokens, note: "Chose the action" });
 
-    const decision = guard(parseJson<Decision>(c.text), perception, current, skippedCritical);
+    const decision = guard(parseJson<Decision>(c.text), perception, current, skippedCritical, b.lang === "hi");
     return NextResponse.json({ perception, decision, trace });
   } catch (e) {
     const err = e instanceof ModelError ? e : new ModelError("Unexpected error");
@@ -122,7 +138,7 @@ function criticalSkipped(p: Perception, steps: Step[], idx: number): Step | null
 }
 
 // The language model proposes; these rules have the final say on safety and on advancing.
-function guard(d: Decision, p: Perception, current: Step, skipped: Step | null): Decision {
+function guard(d: Decision, p: Perception, current: Step, skipped: Step | null, hi: boolean): Decision {
   const actions = ["stay", "advance", "warn", "alarm", "reframe"];
   let out: Decision = {
     action: actions.includes(d.action) ? d.action : "stay",
@@ -132,19 +148,19 @@ function guard(d: Decision, p: Perception, current: Step, skipped: Step | null):
   if (skipped) {
     return {
       action: "alarm",
-      say: out.action === "alarm" && out.say ? out.say : `Stop. You skipped "${skipped.title}". Do that first.`,
+      say: out.action === "alarm" && out.say ? out.say : hi ? `रुकिए। आपने "${skipped.title}" छोड़ दिया। पहले वह कीजिए।` : `Stop. You skipped "${skipped.title}". Do that first.`,
       reason: `Safety-critical step "${skipped.title}" skipped`,
     };
   }
   if (p.viewQuality === "poor" && out.action !== "alarm") {
-    return { action: "reframe", say: out.say || "I can't see your hands. Move the camera.", reason: "Poor view" };
+    return { action: "reframe", say: out.say || (hi ? "मुझे आपका काम नहीं दिख रहा। कैमरा ठीक कीजिए।" : "I can't see your hands. Move the camera."), reason: "Poor view" };
   }
   const doneConfident = p.currentStep.status === "done" && p.currentStep.confidence >= 0.6;
   if (out.action === "advance" && !doneConfident) out = { ...out, action: "stay", reason: `${out.reason} (held: low confidence)` };
   if (doneConfident && (out.action === "stay" || out.action === "warn") && !p.hazards.length)
     out = { ...out, action: "advance", reason: `${out.reason} (step verified)` };
   if (out.action === "advance" && current.safetyCritical && p.currentStep.confidence < 0.75)
-    out = { ...out, action: "stay", say: `Show me clearly: ${current.visualCheck}`, reason: "Safety-critical step needs stronger evidence" };
+    out = { ...out, action: "stay", say: hi ? "यह स्टेप कैमरे को साफ़ दिखाइए।" : `Show me clearly: ${current.visualCheck}`, reason: "Safety-critical step needs stronger evidence" };
   return out;
 }
 

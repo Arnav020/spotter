@@ -13,20 +13,23 @@ const LIMITS = {
   report: { perIp: Number(process.env.LIMIT_REPORT_PER_IP ?? 15), global: Number(process.env.LIMIT_REPORT_GLOBAL ?? 150) },
 };
 
-function hit(key: string, limit: number) {
+function bucket(key: string) {
   const now = Date.now();
   let b = buckets.get(key);
   if (!b || b.resetAt < now) {
     b = { count: 0, resetAt: now + DAY };
     buckets.set(key, b);
   }
-  if (b.count >= limit) return false;
-  b.count++;
-  return true;
+  return b;
 }
 
 export function allow(kind: keyof typeof LIMITS, req: Request) {
   const ip = (req.headers.get("x-forwarded-for") ?? "local").split(",")[0].trim();
   const l = LIMITS[kind];
-  return hit(`${kind}:global`, l.global) && hit(`${kind}:${ip}`, l.perIp);
+  const g = bucket(`${kind}:global`);
+  const p = bucket(`${kind}:${ip}`);
+  if (g.count >= l.global || p.count >= l.perIp) return false;
+  g.count++;
+  p.count++;
+  return true;
 }

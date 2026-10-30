@@ -39,6 +39,9 @@ export function mockChat(model: string, messages: ChatMessage[]): ChatResult {
   } else if (system.includes("real-time coach")) {
     const done = userText.includes('"status":"done"');
     text = JSON.stringify({ action: done ? "advance" : "stay", say: done ? "Nice, that step is done." : "", reason: "mock" });
+  } else if (system.startsWith("Translate")) {
+    const items = JSON.parse(userText) as { id: string; title: string; instruction: string }[];
+    text = JSON.stringify({ items: items.map((i) => ({ ...i, title: `(हिन्दी) ${i.title}` })) });
   } else if (system.includes("auditor")) {
     text = JSON.stringify({
       verdict: "pass_with_issues",

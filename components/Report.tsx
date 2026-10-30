@@ -57,9 +57,13 @@ export default function Report({ procedure, result, onRestart }: { procedure: Pr
             <div className="progress-row active"><span className="spinner" /> Nemotron 3 Ultra is writing the audit…</div>
           )}
         </div>
-        <div style={{ textAlign: "right" }}>
-          {audit && <div className="score">{audit.score}<small>/100</small></div>}
-          <div style={{ color: "var(--ink-2)", fontSize: 13, marginTop: 6 }}>
+        <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+          <div className="gauge">
+            <div className="gauge-inner">
+              <div className="score">{audit ? audit.score : "–"}<small>SCORE</small></div>
+            </div>
+          </div>
+          <div style={{ color: "var(--ink-2)", fontSize: 13, marginTop: 14 }}>
             {verified}/{procedure.steps.length} steps camera-verified · {alarms} alarm{alarms === 1 ? "" : "s"} · {duration}s
           </div>
           <div className="controls no-print" style={{ justifyContent: "flex-end" }}>
@@ -102,7 +106,8 @@ export default function Report({ procedure, result, onRestart }: { procedure: Pr
             const manual = result.events.find((e) => e.kind === "manual" && e.stepId === s.id);
             const skipped = result.statuses[i] === "skipped" || (!done && !manual);
             const ev = done ?? manual;
-            const img = done?.frame ?? manual?.frame;
+            const stepAlarms = result.events.filter((e) => e.kind === "alarm" && e.stepId === s.id);
+            const img = done?.frame ?? manual?.frame ?? stepAlarms[0]?.frame;
             return (
               <article key={s.id} className="card ev">
                 {img ? <img src={img} alt={`Camera frame for ${s.title}`} /> : <div className="noimg">No evidence captured</div>}
@@ -115,6 +120,11 @@ export default function Report({ procedure, result, onRestart }: { procedure: Pr
                   <div style={{ color: "var(--ink-2)", marginTop: 4 }}>
                     {ev ? `+${Math.round((ev.at - result.startedAt) / 1000)}s · ${ev.detail}` : skipped ? "Not completed during the session." : ""}
                   </div>
+                  {stepAlarms.length > 0 && (
+                    <div style={{ color: "var(--bad)", marginTop: 6, fontWeight: 600 }}>
+                      {stepAlarms.length} safety alarm{stepAlarms.length > 1 ? "s" : ""} raised: {stepAlarms[0].detail}
+                    </div>
+                  )}
                 </div>
               </article>
             );
