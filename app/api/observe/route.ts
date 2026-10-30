@@ -143,6 +143,16 @@ function criticalSkipped(p: Perception, steps: Step[], idx: number): Step | null
 
 // The language model proposes; these rules have the final say on safety and on advancing.
 function guard(d: Decision, p: Perception, current: Step, skipped: Step | null, hi: boolean, recent: string[]): Decision {
+  const out = decide(d, p, current, skipped, hi);
+  // Never nag with the same line. Second time, point to the manual button; after that, stay quiet.
+  // Alarms always repeat.
+  const last = recent.slice(-3);
+  if (out.action === "alarm" || !out.say || !last.includes(out.say)) return out;
+  const hint = hi ? "अगर यह हो गया है, तो 'स्टेप पूरा' दबाइए।" : "If it's done, tap Mark step done.";
+  return { ...out, say: last.includes(hint) ? "" : hint };
+}
+
+function decide(d: Decision, p: Perception, current: Step, skipped: Step | null, hi: boolean): Decision {
   const actions = ["stay", "advance", "warn", "alarm", "reframe"];
   let out: Decision = {
     action: actions.includes(d.action) ? d.action : "stay",
@@ -172,11 +182,6 @@ function guard(d: Decision, p: Perception, current: Step, skipped: Step | null, 
     out = { ...out, action: "advance", reason: `${out.reason} (step verified)` };
   if (out.action === "advance" && current.safetyCritical && p.currentStep.confidence < 0.75)
     out = { ...out, action: "stay", say: hi ? "यह स्टेप कैमरे को साफ़ दिखाइए।" : `Hold it up so I can see clearly: ${current.title}.`, reason: "Safety-critical step needs stronger evidence" };
-  // Never nag with the same line. Second time, point to the manual button; after that, stay quiet.
-  if (out.say && recent.slice(-3).includes(out.say)) {
-    const hint = hi ? "अगर यह हो गया है, तो 'स्टेप पूरा' दबाइए।" : "If it's done, tap Mark step done.";
-    out = { ...out, say: recent.slice(-3).includes(hint) ? "" : hint };
-  }
   return out;
 }
 
