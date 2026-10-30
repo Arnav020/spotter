@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SessionConfig } from "./Review";
-import type { ObserveResult, Procedure, SessionEvent, StepStatus, TraceEntry } from "@/lib/types";
+import type { ObserveResult, Perception, Procedure, SessionEvent, StepStatus, TraceEntry } from "@/lib/types";
 
 export type SessionResult = {
   statuses: StepStatus[];
@@ -50,6 +50,8 @@ export default function LiveSession({
   const traceRef = useRef<TraceEntry[]>(initialTrace);
   const quietStreak = useRef(0);
   const alarmStep = useRef<string | null>(null);
+  /** What the camera concluded about the current step on recent frames, so the model can see progress over time. */
+  const history = useRef<Perception["currentStep"][]>([]);
   const backoffUntil = useRef(0);
   const localized = useRef<Record<string, { title: string; instruction: string }>>({});
   const loc = (i: number) => localized.current[steps[i].id] ?? steps[i];
@@ -59,6 +61,7 @@ export default function LiveSession({
   const [events, setEvents] = useState<SessionEvent[]>([]);
   const [trace, setTrace] = useState<TraceEntry[]>(initialTrace);
   const [caption, setCaption] = useState<{ label: string; text: string } | null>(null);
+  const [seen, setSeen] = useState<Perception["currentStep"] | null>(null);
   const [alarm, setAlarm] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [camError, setCamError] = useState<string | null>(null);
@@ -159,6 +162,8 @@ export default function LiveSession({
       setStatus(next, "active");
       setAlarm(null);
       alarmStep.current = null;
+      history.current = [];
+      setSeen(null);
       const s = loc(next);
       setCaption({ label: `Step ${next + 1} of ${steps.length}`, text: s.instruction });
       speak(config.lang === "hi" ? `स्टेप ${next + 1}. ${s.title}.` : `Step ${next + 1}. ${s.title}.`);
@@ -263,7 +268,7 @@ export default function LiveSession({
       setStats((s) => ({ ...s, gated: statsRef.current.gated }));
       return;
     }
-    const frame = capture(640, 0.72);
+    const frame = capture(800, 0.75);
     if (!frame) return;
     commit();
     inFlight.current = true;
@@ -280,6 +285,7 @@ export default function LiveSession({
           currentIndex: i,
           task: procedure.task,
           recent: recentSaid.current,
+          history: history.current.slice(-3),
           lang: config.lang,
           quietStreak: quietStreak.current,
         }),
@@ -294,7 +300,12 @@ export default function LiveSession({
       const s = statsRef.current;
       setStats({ sent: s.sent, gated: s.gated, avgMs: Math.round(s.totalMs / s.sent) });
       // Ignore answers about a step the user already moved past by hand.
-      if (idxRef.current === i && !finishedRef.current) handleResult(data as ObserveResult, capture(360, 0.7) ?? frame);
+      if (idxRef.current === i && !finishedRef.current) {
+        const cs = (data as ObserveResult).perception.currentStep;
+        history.current = [...history.current, cs].slice(-3);
+        setSeen(cs);
+        handleResult(data as ObserveResult, capture(360, 0.7) ?? frame);
+      }
     } catch (e) {
       setApiError(e instanceof Error ? e.message : "Model call failed");
       backoffUntil.current = Date.now() + 4000;
@@ -419,6 +430,11 @@ export default function LiveSession({
             <div className="caption glass" aria-live="polite">
               <small>{caption.label}</small>
               {caption.text}
+              {seen && seen.evidence && (
+                <span className="seen">
+                  Camera sees ({seen.status.replace("_", " ")}, {Math.round(seen.confidence * 100)}%): {seen.evidence}
+                </span>
+              )}
             </div>
           )}
           {alarm && (
