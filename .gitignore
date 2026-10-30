@@ -15,3 +15,6 @@ public/__test.mp4
 .claude/
 SUBMISSION.md
 VIDEO_SCRIPT.md
+
+.vercel
+.env*
