@@ -21,3 +21,8 @@ VIDEO_SCRIPT.md
 
 # demo video (upload to YouTube, not git)
 Spotter_demo.mp4
+devpost_images/
+
+# Keep local notes out of the repo: only the README is published
+*.md
+!README.md

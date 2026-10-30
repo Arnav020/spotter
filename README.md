@@ -5,7 +5,7 @@
 Built for the **Nebius × NVIDIA Global AI Hackathon, Physical AI track**. It runs entirely on **NVIDIA Nemotron models served by Nebius Token Factory**, with **Tavily** grounding every custom procedure in real sources.
 
 - **Live demo:** https://spotter-nemotron.vercel.app *(camera or upload-a-video; works on phones)*
-- **Demo video:** _link added on submission_
+- **Demo video (2:39):** https://youtu.be/DkfmD6YkPzo
 - **License:** MIT
 
 ---
