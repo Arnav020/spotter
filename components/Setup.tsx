@@ -80,11 +80,21 @@ export default function Setup({ onReady }: { onReady: (p: Procedure, trace: Trac
             <button className="btn primary big" onClick={() => onReady(PRESETS[0], [])}>
               Try the ORS demo <Arrow />
             </button>
-            <a className="btn big" href="#build">Build your own checklist</a>
+            <a className="btn big" href="#sample">Watch a sample run</a>
           </div>
         </div>
         <HeroVisual />
       </section>
+
+      <div className="section-title" id="sample">A real run, start to finish</div>
+      <figure className="card sample">
+        <video src="/sample-run.mp4" poster="/sample-run.jpg" controls playsInline preload="none" />
+        <figcaption>
+          Unscripted, on a laptop webcam. Spotter stops the run when hand-washing is skipped, then verifies each step as it
+          happens. Two steps were confirmed by hand, and the audit flags them as not camera-verified. Long waits are sped
+          up and labelled.
+        </figcaption>
+      </figure>
 
       <div className="section-title" id="build">Build a checklist for any task</div>
       <form className="card composer" onSubmit={compile}>
