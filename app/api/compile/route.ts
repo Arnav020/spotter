@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { chat, MODELS, ModelError, parseJson } from "@/lib/nebius";
+import { chatWithFallback, MODELS, ModelError, parseJson } from "@/lib/nebius";
 import { searchProcedure } from "@/lib/tavily";
 import { allow } from "@/lib/ratelimit";
 import type { Procedure, Step, TraceEntry } from "@/lib/types";
@@ -44,15 +44,16 @@ export async function POST(req: Request) {
       ? hits.map((h, i) => `[${i}] ${h.title} (${h.url})\n${h.content}`).join("\n\n")
       : "(no sources found)";
 
-    const r = await chat(
+    const r = await chatWithFallback(
       MODELS.planner,
+      MODELS.fallback,
       [
         { role: "system", content: SYSTEM },
         { role: "user", content: `Task: ${clean}\n\nSources:\n${sourcesText}` },
       ],
-      { maxTokens: 6000, json: true, timeoutMs: 55_000 },
+      { maxTokens: 6000, json: true, timeoutMs: 32_000 },
     );
-    trace.push({ at: Date.now(), role: "planner", model: r.model, ms: r.ms, tokens: r.tokens, note: "Compiled the verifiable checklist" });
+    trace.push({ at: Date.now(), role: "planner", model: r.model, ms: r.ms, tokens: r.tokens, note: r.fellBack ? "Compiled the verifiable checklist (fallback: Ultra was too slow)" : "Compiled the verifiable checklist" });
 
     const c = parseJson<Compiled>(r.text);
     if (c.refuse) return NextResponse.json({ error: `Spotter can't coach this: ${c.refuse}`, trace }, { status: 422 });

@@ -11,6 +11,8 @@ export const MODELS = {
   perception: process.env.SPOTTER_VISION_MODEL || "nvidia/Nemotron-3.5-Super-VL",
   // Fast, cheap real-time loop: decides what to do and what to say.
   controller: process.env.SPOTTER_CONTROLLER_MODEL || "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+  // Backup planner when Ultra is slow or unavailable.
+  fallback: process.env.SPOTTER_FALLBACK_MODEL || "nvidia/nemotron-3-super-120b-a12b",
 } as const;
 
 export class ModelError extends Error {
@@ -33,7 +35,7 @@ export function isConfigured() {
 export async function chat(
   model: string,
   messages: ChatMessage[],
-  opts: { maxTokens: number; temperature?: number; json?: boolean; thinking?: boolean; timeoutMs?: number },
+  opts: { maxTokens: number; temperature?: number; json?: boolean; thinking?: boolean; timeoutMs?: number; plain?: boolean },
 ): Promise<ChatResult> {
   if (MOCK) {
     await new Promise((r) => setTimeout(r, 300));
@@ -48,9 +50,9 @@ export async function chat(
     max_tokens: opts.maxTokens,
     temperature: opts.temperature ?? 0.2,
   };
-  if (opts.json) body.response_format = { type: "json_object" };
+  if (opts.json && !opts.plain) body.response_format = { type: "json_object" };
   // Nemotron 3 models reason by default. The real-time loop can't afford that.
-  if (opts.thinking === false) body.chat_template_kwargs = { enable_thinking: false };
+  if (opts.thinking === false && !opts.plain) body.chat_template_kwargs = { enable_thinking: false };
 
   const started = Date.now();
   const ctrl = new AbortController();
@@ -71,6 +73,10 @@ export async function chat(
 
   if (!res.ok) {
     const detail = (await res.text()).slice(0, 300);
+    // Some models reject optional params (JSON mode, thinking switch). Retry once without them.
+    if (res.status === 400 && (opts.json || opts.thinking === false) && !opts.plain) {
+      return chat(model, messages, { ...opts, plain: true });
+    }
     throw new ModelError(`${model} returned ${res.status}: ${detail}`, res.status === 429 ? 429 : 502);
   }
   const data = await res.json();
@@ -98,5 +104,21 @@ export function parseJson<T>(text: string): T {
     return JSON.parse(candidate.slice(start, end + 1)) as T;
   } catch {
     throw new ModelError("Model returned malformed JSON");
+  }
+}
+
+/** Try the primary model; if it fails or times out, retry once on a fallback model. */
+export async function chatWithFallback(
+  primary: string,
+  fallback: string,
+  messages: ChatMessage[],
+  opts: Parameters<typeof chat>[2] & { fallbackTimeoutMs?: number },
+): Promise<ChatResult & { fellBack?: string }> {
+  try {
+    return await chat(primary, messages, opts);
+  } catch (e) {
+    if (primary === fallback || (e instanceof ModelError && e.status === 503)) throw e;
+    const r = await chat(fallback, messages, { ...opts, thinking: false, timeoutMs: opts.fallbackTimeoutMs ?? 25_000 });
+    return { ...r, fellBack: e instanceof Error ? e.message : "primary failed" };
   }
 }

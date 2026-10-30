@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { chat, MODELS, ModelError, parseJson } from "@/lib/nebius";
+import { chatWithFallback, MODELS, ModelError, parseJson } from "@/lib/nebius";
 import { allow } from "@/lib/ratelimit";
 import type { Audit, Procedure, SessionEvent, TraceEntry } from "@/lib/types";
 
@@ -28,15 +28,16 @@ export async function POST(req: Request) {
     .join("\n");
 
   try {
-    const r = await chat(
+    const r = await chatWithFallback(
       MODELS.planner,
+      MODELS.fallback,
       [
         { role: "system", content: SYSTEM },
         { role: "user", content: `Task: ${b.procedure.task}\nDuration: ${Math.round(b.durationMs / 1000)}s\n\nChecklist:\n${checklist}\n\nSession log:\n${log}` },
       ],
-      { maxTokens: 4000, json: true, timeoutMs: 55_000 },
+      { maxTokens: 4000, json: true, timeoutMs: 32_000 },
     );
-    const trace: TraceEntry[] = [{ at: Date.now(), role: "auditor", model: r.model, ms: r.ms, tokens: r.tokens, note: "Wrote the audit" }];
+    const trace: TraceEntry[] = [{ at: Date.now(), role: "auditor", model: r.model, ms: r.ms, tokens: r.tokens, note: r.fellBack ? "Wrote the audit (fallback: Ultra was too slow)" : "Wrote the audit" }];
     const a = parseJson<Audit>(r.text);
     const audit: Audit = {
       verdict: ["pass", "pass_with_issues", "fail"].includes(a.verdict) ? a.verdict : "pass_with_issues",
